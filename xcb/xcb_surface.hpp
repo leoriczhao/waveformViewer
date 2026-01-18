@@ -1,18 +1,14 @@
 #pragma once
 
-#include "component/surface.hpp"
-#include <memory>
+#include "surface.hpp"
+#include <xcb/xcb.h>
 
-namespace comp {
+namespace wv {
 
-class OpenGLSurface : public Surface {
+class XcbSurface : public Surface {
 public:
-    void init(SurfaceID sid) override;
+    void init(SurfaceID sid, i32 w, i32 h) override;
     void release() override;
-    
-    i32 width() const override { return w_; }
-    i32 height() const override { return h_; }
-    void resize(i32 w, i32 h) { w_ = w; h_ = h; }
     
     void fillRect(Rect r, Color c) override;
     void strokeRect(Rect r, Color c, f32 width) override;
@@ -23,13 +19,16 @@ public:
     void setClip(Rect r) override;
     void clearClip() override;
     
-    void beginFrame();
-    void endFrame();
+    void copyToWindow(xcb_window_t win);
+    xcb_pixmap_t pixmap() const { return pixmap_; }
     
 private:
+    xcb_connection_t* conn_ = nullptr;
+    xcb_pixmap_t pixmap_ = 0;
+    xcb_gcontext_t gc_ = 0;
     i32 w_ = 0, h_ = 0;
+    
+    void setColor(Color c);
 };
-
-std::unique_ptr<OpenGLSurface> createOpenGLSurface();
 
 }

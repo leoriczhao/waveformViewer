@@ -1,107 +1,92 @@
-#include <component/component.hpp>
-#include <component/opengl_surface.hpp>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
-#include <cmath>
-#include <vector>
+#include "waveform_viewer.hpp"
+#include "vcd_parser.hpp"
+#include "xcb_surface.hpp"
+#include <xcb/xcb.h>
 
-using namespace comp;
+using namespace wv;
 
-class WaveformViewer : public Component {
-public:
-    void setData(const float* data, i32 count) {
-        data_.assign(data, data + count);
-        invalidate();
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        return 1;
     }
     
-    void paint(Surface* s) override {
-        s->fillRect({0, 0, f32(width()), f32(height())}, {20, 25, 30, 255});
-        
-        f32 centerY = height() / 2.0f;
-        s->drawLine({0, centerY}, {f32(width()), centerY}, {50, 55, 60, 255}, 1);
-        
-        if (data_.empty()) return;
-        
-        std::vector<Point> pts(data_.size());
-        f32 xScale = f32(width()) / data_.size();
-        f32 yScale = height() * 0.4f;
-        
-        for (size_t i = 0; i < data_.size(); ++i) {
-            pts[i] = {i * xScale, centerY - data_[i] * yScale};
-        }
-        
-        s->drawPolyline(pts.data(), i32(pts.size()), {0, 200, 100, 255}, 1.5f);
+    VcdParser parser;
+    if (!parser.parse(argv[1])) {
+        return 1;
     }
     
-    void onMouseWheel(const MouseEvent& e) override {
-        zoom_ *= (e.wheelDelta > 0) ? 1.1f : 0.9f;
-        invalidate();
-    }
+    xcb_connection_t* conn = xcb_connect(nullptr, nullptr);
+    auto setup = xcb_get_setup(conn);
+    auto screen = xcb_setup_roots_iterator(setup).data;
     
-private:
-    std::vector<float> data_;
-    f32 zoom_ = 1.0f;
-};
-
-int main() {
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    xcb_window_t win = xcb_generate_id(conn);
+    u32 mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
+    u32 values[] = {screen->black_pixel, 
+        XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY |
+        XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE | XCB_EVENT_MASK_POINTER_MOTION};
+    xcb_create_window(conn, XCB_COPY_FROM_PARENT, win, screen->root, 0, 0, 800, 600, 0,
+        XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
+    xcb_map_window(conn, win);
+    xcb_flush(conn);
     
-    SDL_Window* win = SDL_CreateWindow("Waveform Viewer", 
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    SDL_GLContext ctx = SDL_GL_CreateContext(win);
+    XcbSurface surface;
+    surface.init(conn, 800, 600);
     
-    auto surface = createOpenGLSurface();
     WaveformViewer viewer;
-    
-    std::vector<float> wave(512);
-    for (size_t i = 0; i < wave.size(); ++i) {
-        wave[i] = std::sin(i * 0.05f) * 0.8f;
-    }
-    viewer.setData(wave.data(), wave.size());
-    
-    int w, h;
-    SDL_GetWindowSize(win, &w, &h);
-    viewer.setSize(w, h);
-    surface->resize(w, h);
+    viewer.setSize(800, 600);
+    viewer.setData(&parser.data());
     
     bool running = true;
     while (running) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            switch (e.type) {
-                case SDL_QUIT: running = false; break;
-                case SDL_WINDOWEVENT:
-                    if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                        viewer.setSize(e.window.data1, e.window.data2);
-                        surface->resize(e.window.data1, e.window.data2);
-                    }
-                    break;
-                case SDL_MOUSEWHEEL: {
-                    MouseEvent me;
-                    me.wheelDelta = e.wheel.y;
-                    viewer.onMouseWheel(me);
-                    break;
-                }
+        xcb_generic_event_t* ev = xcb_wait_for_event(conn);
+        if (!ev) break;
+        
+        switch (ev->response_type & ~0x80) {
+            case XCB_EXPOSE:
+                viewer.paint(&surface);
+                surface.copyToWindow(win);
+                break;
+            case XCB_CONFIGURE_NOTIFY: {
+                auto* cfg = reinterpret_cast<xcb_configure_notify_event_t*>(ev);
+                viewer.setSize(cfg->width, cfg->height);
+                surface.release();
+                surface.init(conn, cfg->width, cfg->height);
+                viewer.setData(&parser.data());
+                break;
+            }
+            case XCB_BUTTON_PRESS: {
+                auto* btn = reinterpret_cast<xcb_button_press_event_t*>(ev);
+                if (btn->detail == 1)
+                    viewer.mouseDown(btn->event_x, btn->event_y);
+                else if (btn->detail == 4)
+                    viewer.mouseWheel(btn->event_x, 1);
+                else if (btn->detail == 5)
+                    viewer.mouseWheel(btn->event_x, -1);
+                break;
+            }
+            case XCB_BUTTON_RELEASE: {
+                auto* btn = reinterpret_cast<xcb_button_release_event_t*>(ev);
+                if (btn->detail == 1)
+                    viewer.mouseUp();
+                break;
+            }
+            case XCB_MOTION_NOTIFY: {
+                auto* motion = reinterpret_cast<xcb_motion_notify_event_t*>(ev);
+                viewer.mouseMove(motion->event_x, motion->event_y);
+                break;
             }
         }
+        free(ev);
         
         if (viewer.needsRepaint()) {
-            glClear(GL_COLOR_BUFFER_BIT);
-            surface->beginFrame();
-            viewer.paint(surface.get());
-            surface->endFrame();
-            SDL_GL_SwapWindow(win);
+            viewer.paint(&surface);
+            surface.copyToWindow(win);
             viewer.clearRepaintFlag();
         }
-        
-        SDL_Delay(16);
     }
     
-    SDL_GL_DeleteContext(ctx);
-    SDL_DestroyWindow(win);
-    SDL_Quit();
+    surface.release();
+    xcb_destroy_window(conn, win);
+    xcb_disconnect(conn);
     return 0;
 }
