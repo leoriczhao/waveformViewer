@@ -1,7 +1,7 @@
 #include "vcd_parser.hpp"
 #include <fstream>
 #include <sstream>
-#include <unordered_map>
+#include <algorithm>
 
 namespace wv {
 
@@ -10,9 +10,48 @@ bool VcdParser::parse(const std::string& filename) {
     if (!file) return false;
     
     data_ = WaveformData{};
+    signalIndex_.clear();
     parseHeader(file);
     parseValues(file);
     return true;
+}
+
+std::string VcdParser::trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
+bool VcdParser::parseTimescaleParts(const std::string& value, const std::string& unit) {
+    if (value.empty() || unit.empty()) return false;
+    
+    i32 val = 0;
+    try {
+        val = std::stoi(value);
+    } catch (...) {
+        return false;
+    }
+    
+    u64 mult = 1;
+    if (unit.find("ps") != std::string::npos) mult = 1;
+    else if (unit.find("ns") != std::string::npos) mult = 1000;
+    else if (unit.find("us") != std::string::npos) mult = 1000000;
+    else if (unit.find("ms") != std::string::npos) mult = 1000000000;
+    else return false;
+    
+    data_.timescale = u64(val) * mult;
+    return true;
+}
+
+bool VcdParser::parseTimescaleToken(const std::string& token) {
+    size_t pos = 0;
+    while (pos < token.size() && std::isdigit(static_cast<unsigned char>(token[pos]))) pos++;
+    if (pos == 0 || pos == token.size()) return false;
+    
+    std::string value = token.substr(0, pos);
+    std::string unit = token.substr(pos);
+    return parseTimescaleParts(value, unit);
 }
 
 void VcdParser::parseHeader(std::istream& is) {
@@ -22,16 +61,21 @@ void VcdParser::parseHeader(std::istream& is) {
     while (std::getline(is, line)) {
         std::istringstream iss(line);
         iss >> token;
+        if (token.empty()) continue;
         
         if (token == "$timescale") {
-            i32 val; std::string unit;
-            iss >> val >> unit;
-            u64 mult = 1;
-            if (unit.find("ps") != std::string::npos) mult = 1;
-            else if (unit.find("ns") != std::string::npos) mult = 1000;
-            else if (unit.find("us") != std::string::npos) mult = 1000000;
-            else if (unit.find("ms") != std::string::npos) mult = 1000000000;
-            data_.timescale = val * mult;
+            std::string value, unit, endToken;
+            iss >> value >> unit;
+            if (unit == "$end") {
+                parseTimescaleToken(value);
+            } else if (!value.empty() && !unit.empty()) {
+                parseTimescaleParts(value, unit);
+            } else if (!value.empty()) {
+                parseTimescaleToken(value);
+            } else {
+                iss >> value >> unit;
+                parseTimescaleParts(value, unit);
+            }
         }
         else if (token == "$scope") {
             std::string type, name;
@@ -51,6 +95,7 @@ void VcdParser::parseHeader(std::istream& is) {
             fullName += name;
             
             data_.signals.push_back({fullName, id, width, {}});
+            signalIndex_[id] = data_.signals.size() - 1;
         }
         else if (token == "$enddefinitions") {
             break;
@@ -74,8 +119,8 @@ void VcdParser::parseValues(std::istream& is) {
         else if (line[0] == 'b' || line[0] == 'B') {
             size_t space = line.find(' ');
             if (space != std::string::npos) {
-                std::string bits = line.substr(1, space - 1);
-                std::string id = line.substr(space + 1);
+                std::string bits = trim(line.substr(1, space - 1));
+                std::string id = trim(line.substr(space + 1));
                 u64 val = 0;
                 for (char c : bits) {
                     val <<= 1;
@@ -87,7 +132,7 @@ void VcdParser::parseValues(std::istream& is) {
         }
         else if (line[0] == '0' || line[0] == '1' || line[0] == 'x' || line[0] == 'X' || line[0] == 'z' || line[0] == 'Z') {
             u64 val = (line[0] == '1') ? 1 : 0;
-            std::string id = line.substr(1);
+            std::string id = trim(line.substr(1));
             if (auto* sig = findSignal(id))
                 sig->changes.push_back({currentTime, val});
         }
@@ -95,9 +140,9 @@ void VcdParser::parseValues(std::istream& is) {
 }
 
 Signal* VcdParser::findSignal(const std::string& id) {
-    for (auto& sig : data_.signals)
-        if (sig.id == id) return &sig;
-    return nullptr;
+    auto it = signalIndex_.find(id);
+    if (it == signalIndex_.end()) return nullptr;
+    return &data_.signals[it->second];
 }
 
 }
