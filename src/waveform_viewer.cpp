@@ -36,7 +36,6 @@ void WaveformViewer::drawTimeScale(Surface* s) {
     
     f64 visibleStart = timeOffset_;
     f64 visibleEnd = timeOffset_ + (w_ - nameWidth_) / timeScale_;
-    f64 range = visibleEnd - visibleStart;
     
     f64 step = 1;
     while (step * timeScale_ < 50) step *= 10;
@@ -115,10 +114,13 @@ void WaveformViewer::mouseWheel(i32 x, i32 delta) {
     
     f64 mouseTime = timeOffset_ + (x - nameWidth_) / timeScale_;
     f64 factor = delta > 0 ? 1.2 : 0.8;
-    timeScale_ *= factor;
-    timeOffset_ = mouseTime - (x - nameWidth_) / timeScale_;
+    f64 newScale = timeScale_ * factor;
     
-    needsRepaint_ = true;
+    if (newScale > 1e-10 && newScale < 1e10) {
+        timeScale_ = newScale;
+        timeOffset_ = mouseTime - (x - nameWidth_) / timeScale_;
+        needsRepaint_ = true;
+    }
 }
 
 }

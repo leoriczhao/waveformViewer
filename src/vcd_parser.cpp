@@ -66,8 +66,10 @@ void VcdParser::parseValues(std::istream& is) {
         if (line.empty()) continue;
         
         if (line[0] == '#') {
-            currentTime = std::stoull(line.substr(1));
-            data_.endTime = currentTime;
+            try {
+                currentTime = std::stoull(line.substr(1));
+                data_.endTime = currentTime;
+            } catch (...) {}
         }
         else if (line[0] == 'b' || line[0] == 'B') {
             size_t space = line.find(' ');
