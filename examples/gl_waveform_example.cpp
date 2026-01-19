@@ -32,7 +32,12 @@ int main(int argc, char* argv[]) {
     
     GlSurface surface;
     surface.init(dpy, 800, 600);
-    surface.setWindow(win, vi);
+    if (!surface.setWindow(win, vi)) {
+        XFree(vi);
+        XDestroyWindow(dpy, win);
+        XCloseDisplay(dpy);
+        return 1;
+    }
     XFree(vi);
     
     WaveformViewer viewer;

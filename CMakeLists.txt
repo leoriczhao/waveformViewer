@@ -11,8 +11,6 @@ add_library(waveform_core STATIC
 )
 target_include_directories(waveform_core PUBLIC include)
 
-target_link_libraries(waveform_core PUBLIC)
-
 add_library(waveform_backend_xcb STATIC
     xcb/xcb_surface.cpp
 )

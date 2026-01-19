@@ -49,6 +49,7 @@ typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLch
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC)(GLint location, GLfloat v0, GLfloat v1);
 typedef void (APIENTRYP PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 typedef void (APIENTRYP PFNGLUNIFORM1IPROC)(GLint location, GLint v0);
+typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC)(GLenum texture);
 typedef void (APIENTRYP PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 typedef void (APIENTRYP PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);
 
@@ -76,6 +77,7 @@ extern PFNGLGETUNIFORMLOCATIONPROC glad_glGetUniformLocation;
 extern PFNGLUNIFORM2FPROC glad_glUniform2f;
 extern PFNGLUNIFORM4FPROC glad_glUniform4f;
 extern PFNGLUNIFORM1IPROC glad_glUniform1i;
+extern PFNGLACTIVETEXTUREPROC glad_glActiveTexture;
 extern PFNGLVERTEXATTRIBPOINTERPROC glad_glVertexAttribPointer;
 extern PFNGLENABLEVERTEXATTRIBARRAYPROC glad_glEnableVertexAttribArray;
 
@@ -103,6 +105,7 @@ extern PFNGLENABLEVERTEXATTRIBARRAYPROC glad_glEnableVertexAttribArray;
 #define glUniform2f glad_glUniform2f
 #define glUniform4f glad_glUniform4f
 #define glUniform1i glad_glUniform1i
+#define glActiveTexture glad_glActiveTexture
 #define glVertexAttribPointer glad_glVertexAttribPointer
 #define glEnableVertexAttribArray glad_glEnableVertexAttribArray
 

@@ -25,7 +25,7 @@ public:
     void setClip(Rect r) override;
     void clearClip() override;
     
-    void setWindow(Window win, XVisualInfo* vi = nullptr);
+    bool setWindow(Window win, XVisualInfo* vi = nullptr);
     static XVisualInfo* chooseVisual(Display* dpy);
     
 private:

@@ -151,10 +151,6 @@ static const u8 fontData[][13] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x8c,0xd6,0x62,0x00},
 };
 
-static void setGlColor(Color c) {
-    glColor4ub(c.r, c.g, c.b, c.a);
-}
-
 XVisualInfo* GlSurface::chooseVisual(Display* dpy) {
     int attribs[] = { GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 0, None };
     return glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
@@ -166,14 +162,19 @@ void GlSurface::init(SurfaceID sid, i32 w, i32 h) {
     h_ = h;
 }
 
-void GlSurface::setWindow(Window win, XVisualInfo* vi) {
+bool GlSurface::setWindow(Window win, XVisualInfo* vi) {
     win_ = win;
     XVisualInfo* localVi = vi ? vi : chooseVisual(display_);
+    if (!localVi) return false;
+    
     ctx_ = glXCreateContext(display_, localVi, nullptr, True);
     if (!vi) XFree(localVi);
-    glXMakeCurrent(display_, win_, ctx_);
-    gladLoadGL();
-    initGL();
+    if (!ctx_) return false;
+    if (!glXMakeCurrent(display_, win_, ctx_)) return false;
+    if (!gladLoadGL()) return false;
+    if (!initGL()) return false;
+    
+    return true;
 }
 
 void GlSurface::resize(i32 w, i32 h) {

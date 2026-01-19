@@ -25,6 +25,7 @@ PFNGLGETUNIFORMLOCATIONPROC glad_glGetUniformLocation = NULL;
 PFNGLUNIFORM2FPROC glad_glUniform2f = NULL;
 PFNGLUNIFORM4FPROC glad_glUniform4f = NULL;
 PFNGLUNIFORM1IPROC glad_glUniform1i = NULL;
+PFNGLACTIVETEXTUREPROC glad_glActiveTexture = NULL;
 PFNGLVERTEXATTRIBPOINTERPROC glad_glVertexAttribPointer = NULL;
 PFNGLENABLEVERTEXATTRIBARRAYPROC glad_glEnableVertexAttribArray = NULL;
 
@@ -53,6 +54,7 @@ int gladLoadGL(void) {
     glad_glUniform2f = (PFNGLUNIFORM2FPROC)glXGetProcAddress((const GLubyte*)"glUniform2f");
     glad_glUniform4f = (PFNGLUNIFORM4FPROC)glXGetProcAddress((const GLubyte*)"glUniform4f");
     glad_glUniform1i = (PFNGLUNIFORM1IPROC)glXGetProcAddress((const GLubyte*)"glUniform1i");
+    glad_glActiveTexture = (PFNGLACTIVETEXTUREPROC)glXGetProcAddress((const GLubyte*)"glActiveTexture");
     glad_glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)glXGetProcAddress((const GLubyte*)"glVertexAttribPointer");
     glad_glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)glXGetProcAddress((const GLubyte*)"glEnableVertexAttribArray");
     
