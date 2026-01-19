@@ -1,11 +1,14 @@
 #pragma once
 
 #include "surface.hpp"
-#include <xcb/xcb.h>
+#include <vector>
+#include <GL/glew.h>
+#include <GL/glx.h>
+#include <X11/Xlib.h>
 
 namespace wv {
 
-class XcbSurface : public Surface {
+class GlSurface : public Surface {
 public:
     void init(SurfaceID sid, i32 w, i32 h) override;
     void resize(i32 w, i32 h) override;
@@ -23,18 +26,32 @@ public:
     void setClip(Rect r) override;
     void clearClip() override;
     
-    void setWindow(xcb_window_t win);
-    xcb_pixmap_t pixmap() const { return pixmap_; }
+    void setWindow(Window win) { win_ = win; }
+    bool createContext(Display* dpy, Window win);
     
 private:
-    xcb_connection_t* conn_ = nullptr;
-    xcb_window_t win_ = 0;
-    xcb_pixmap_t pixmap_ = 0;
-    xcb_gcontext_t gc_ = 0;
+    Display* dpy_ = nullptr;
+    Window win_ = 0;
+    GLXContext ctx_ = nullptr;
     i32 w_ = 0, h_ = 0;
     
-    void setColor(Color c);
-    void createPixmap();
+    struct Vertex {
+        f32 x, y;
+        u8 r, g, b, a;
+    };
+    
+    std::vector<Vertex> lineVertices_;
+    std::vector<Vertex> triVertices_;
+    
+    GLuint vao_ = 0;
+    GLuint vbo_ = 0;
+    GLuint shader_ = 0;
+    
+    void initGL();
+    void flushLines();
+    void flushTriangles();
+    GLuint compileShader(GLenum type, const char* src);
+    GLuint createProgram();
 };
 
 }

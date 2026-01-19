@@ -5,18 +5,39 @@ namespace wv {
 
 void XcbSurface::init(SurfaceID sid, i32 w, i32 h) {
     conn_ = static_cast<xcb_connection_t*>(sid);
-    w_ = w; h_ = h;
-    
+    w_ = w;
+    h_ = h;
+}
+
+void XcbSurface::createPixmap() {
     auto setup = xcb_get_setup(conn_);
     auto screen = xcb_setup_roots_iterator(setup).data;
     
+    xcb_drawable_t drawable = win_ ? win_ : screen->root;
+    
     pixmap_ = xcb_generate_id(conn_);
-    xcb_create_pixmap(conn_, screen->root_depth, pixmap_, screen->root, w, h);
+    xcb_create_pixmap(conn_, screen->root_depth, pixmap_, drawable, w_, h_);
     
     gc_ = xcb_generate_id(conn_);
     u32 mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
     u32 values[] = {screen->black_pixel, 0};
     xcb_create_gc(conn_, gc_, pixmap_, mask, values);
+}
+
+void XcbSurface::setWindow(xcb_window_t win) {
+    win_ = win;
+    if (!pixmap_) {
+        createPixmap();
+    }
+}
+
+void XcbSurface::resize(i32 w, i32 h) {
+    if (w == w_ && h == h_) return;
+    w_ = w;
+    h_ = h;
+    if (pixmap_) xcb_free_pixmap(conn_, pixmap_);
+    if (gc_) xcb_free_gc(conn_, gc_);
+    createPixmap();
 }
 
 void XcbSurface::release() {
@@ -67,16 +88,26 @@ void XcbSurface::drawText(Point, std::string_view, Color) {}
 
 void XcbSurface::setClip(Rect r) {
     xcb_rectangle_t rect = {int16_t(r.x), int16_t(r.y), uint16_t(r.w), uint16_t(r.h)};
+    u32 mask = XCB_GC_CLIP_ORIGIN_X | XCB_GC_CLIP_ORIGIN_Y;
+    u32 values[] = {0, 0};
+    xcb_change_gc(conn_, gc_, mask, values);
     xcb_set_clip_rectangles(conn_, XCB_CLIP_ORDERING_UNSORTED, gc_, 0, 0, 1, &rect);
 }
 
 void XcbSurface::clearClip() {
-    xcb_set_clip_rectangles(conn_, XCB_CLIP_ORDERING_UNSORTED, gc_, 0, 0, 0, nullptr);
+    u32 mask = XCB_GC_CLIP_MASK;
+    u32 values[] = {XCB_NONE};
+    xcb_change_gc(conn_, gc_, mask, values);
 }
 
-void XcbSurface::copyToWindow(xcb_window_t win) {
-    xcb_copy_area(conn_, pixmap_, win, gc_, 0, 0, 0, 0, w_, h_);
-    xcb_flush(conn_);
+void XcbSurface::beginFrame() {
+}
+
+void XcbSurface::endFrame() {
+    if (win_) {
+        xcb_copy_area(conn_, pixmap_, win_, gc_, 0, 0, 0, 0, w_, h_);
+        xcb_flush(conn_);
+    }
 }
 
 }

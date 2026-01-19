@@ -10,7 +10,11 @@ public:
     virtual ~Surface() = default;
     
     virtual void init(SurfaceID sid, i32 w, i32 h) = 0;
+    virtual void resize(i32 w, i32 h) = 0;
     virtual void release() = 0;
+    
+    virtual void beginFrame() {}
+    virtual void endFrame() {}
     
     virtual void fillRect(Rect r, Color c) = 0;
     virtual void strokeRect(Rect r, Color c, f32 width = 1.0f) = 0;
