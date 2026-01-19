@@ -31,6 +31,7 @@ int main(int argc, char* argv[]) {
     
     XcbSurface surface;
     surface.init(conn, 800, 600);
+    surface.setWindow(win);
     
     WaveformViewer viewer;
     viewer.setSize(800, 600);
@@ -43,15 +44,18 @@ int main(int argc, char* argv[]) {
         
         switch (ev->response_type & ~0x80) {
             case XCB_EXPOSE:
+                surface.beginFrame();
                 viewer.paint(&surface);
-                surface.copyToWindow(win);
+                surface.endFrame();
                 break;
             case XCB_CONFIGURE_NOTIFY: {
                 auto* cfg = reinterpret_cast<xcb_configure_notify_event_t*>(ev);
                 viewer.setSize(cfg->width, cfg->height);
-                surface.release();
-                surface.init(conn, cfg->width, cfg->height);
+                surface.resize(cfg->width, cfg->height);
                 viewer.setData(&parser.data());
+                surface.beginFrame();
+                viewer.paint(&surface);
+                surface.endFrame();
                 break;
             }
             case XCB_BUTTON_PRESS: {
@@ -79,8 +83,9 @@ int main(int argc, char* argv[]) {
         free(ev);
         
         if (viewer.needsRepaint()) {
+            surface.beginFrame();
             viewer.paint(&surface);
-            surface.copyToWindow(win);
+            surface.endFrame();
             viewer.clearRepaintFlag();
         }
     }

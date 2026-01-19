@@ -1,31 +1,20 @@
 # waveformViewer
 
-A minimal, cross-platform GUI component framework for building custom visualization components like waveform displays.
+A lightweight VCD waveform viewer for digital signal visualization. Parses VCD files and renders interactive waveform displays.
 
-## Architecture
+## Features
 
-```
-┌─────────────────────────────────────────┐
-│  Host Application (Qt/Win32/GTK/...)    │
-│  - Creates window                       │
-│  - Forwards events to component         │
-│  - Calls component->paint(surface)      │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│  Your Component (e.g. WaveformViewer)   │
-│  - Inherits from comp::Component        │
-│  - Implements paint(Surface*)           │
-│  - Handles events (onMouseDown, etc.)   │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│  Surface (Abstract Interface)           │
-│  - drawLine, fillRect, drawPolyline...  │
-│  - Platform implementations:            │
-│    - OpenGL, GDI, Cairo, CoreGraphics   │
-└─────────────────────────────────────────┘
-```
+- VCD file parsing
+- Interactive pan (drag) and zoom (scroll wheel)
+- Signal name display
+- Time scale ruler
+
+## Dependencies
+
+- CMake 3.16+
+- C++17 compiler
+- XCB (X11)
+- GTest (optional, for tests)
 
 ## Building
 
@@ -35,24 +24,62 @@ cmake ..
 make
 ```
 
+Run the example:
+```bash
+./waveform_example path/to/file.vcd
+```
+
 ## Usage
 
 ```cpp
-#include <component/component.hpp>
-#include <component/opengl_surface.hpp>
+#include "waveform_viewer.hpp"
+#include "vcd_parser.hpp"
+#include "xcb_surface.hpp"
 
-class WaveformViewer : public comp::Component {
-public:
-    void paint(comp::Surface* s) override {
-        s->fillRect({0, 0, width(), height()}, {20, 25, 30, 255});
-        s->drawPolyline(points.data(), points.size(), {0, 200, 100, 255}, 1.5f);
-    }
-    
-    void onMouseWheel(const comp::MouseEvent& e) override {
-        zoom_ *= (e.wheelDelta > 0) ? 1.1f : 0.9f;
-        invalidate();
-    }
-};
+using namespace wv;
+
+// Parse VCD file
+VcdParser parser;
+parser.parse("signals.vcd");
+
+// Create surface and viewer
+XcbSurface surface;
+surface.init(conn, 800, 600);
+
+WaveformViewer viewer;
+viewer.setSize(800, 600);
+viewer.setData(&parser.data());
+
+// Render
+viewer.paint(&surface);
+
+// Handle input
+viewer.mouseDown(x, y);    // Start drag
+viewer.mouseMove(x, y);    // Pan
+viewer.mouseUp();          // End drag
+viewer.mouseWheel(x, delta); // Zoom
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│  VcdParser                              │
+│  - Parses .vcd files                    │
+│  - Produces WaveformData                │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│  WaveformViewer                         │
+│  - Renders signals via Surface          │
+│  - Handles pan/zoom interaction         │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│  Surface (abstract)                     │
+│  - fillRect, drawLine, drawPolyline...  │
+│  - XcbSurface (current implementation)  │
+└─────────────────────────────────────────┘
 ```
 
 ## License
