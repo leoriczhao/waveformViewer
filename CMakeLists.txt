@@ -25,12 +25,13 @@ if(WAVEFORM_BACKEND STREQUAL "xcb")
 elseif(WAVEFORM_BACKEND STREQUAL "gl")
     find_package(OpenGL REQUIRED)
     find_package(GLEW REQUIRED)
+    find_package(X11 REQUIRED)
     
     add_library(waveform_backend STATIC
         gl/gl_surface.cpp
     )
     target_include_directories(waveform_backend PUBLIC include gl)
-    target_link_libraries(waveform_backend PUBLIC waveform_core OpenGL::GL GLEW::GLEW X11)
+    target_link_libraries(waveform_backend PUBLIC waveform_core OpenGL::GL GLEW::GLEW X11::X11)
 endif()
 
 # Unified library name

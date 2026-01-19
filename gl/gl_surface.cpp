@@ -1,5 +1,6 @@
 #include "gl_surface.hpp"
 #include <cstdio>
+#include <GL/glxext.h>
 
 namespace wv {
 
@@ -26,27 +27,50 @@ void main() {
 }
 )";
 
-bool GlSurface::createContext(Display* dpy, Window win) {
+bool GlSurface::createContext(Display* dpy, Window win, XVisualInfo* vi) {
     dpy_ = dpy;
     win_ = win;
     
-    int attribs[] = {
-        GLX_RGBA,
-        GLX_DEPTH_SIZE, 24,
-        GLX_DOUBLEBUFFER,
-        None
-    };
+    PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB = 
+        (PFNGLXCREATECONTEXTATTRIBSARBPROC)glXGetProcAddressARB(
+            (const GLubyte*)"glXCreateContextAttribsARB");
     
-    XVisualInfo* vi = glXChooseVisual(dpy_, DefaultScreen(dpy_), attribs);
-    if (!vi) return false;
+    if (glXCreateContextAttribsARB) {
+        int fbcount;
+        GLXFBConfig* fbc = glXChooseFBConfig(dpy_, DefaultScreen(dpy_), nullptr, &fbcount);
+        if (fbc && fbcount > 0) {
+            int contextAttribs[] = {
+                GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+                GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+                GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+                None
+            };
+            ctx_ = glXCreateContextAttribsARB(dpy_, fbc[0], nullptr, True, contextAttribs);
+            XFree(fbc);
+        }
+    }
     
-    ctx_ = glXCreateContext(dpy_, vi, nullptr, GL_TRUE);
-    XFree(vi);
+    if (!ctx_ && vi) {
+        ctx_ = glXCreateContext(dpy_, vi, nullptr, GL_TRUE);
+    }
     
-    if (!ctx_) return false;
+    if (!ctx_) {
+        fprintf(stderr, "Failed to create OpenGL context\n");
+        return false;
+    }
     
-    glXMakeCurrent(dpy_, win_, ctx_);
-    initGL();
+    if (!glXMakeCurrent(dpy_, win_, ctx_)) {
+        fprintf(stderr, "Failed to make OpenGL context current\n");
+        glXDestroyContext(dpy_, ctx_);
+        ctx_ = nullptr;
+        return false;
+    }
+    
+    if (!initGL()) {
+        release();
+        return false;
+    }
+    
     return true;
 }
 
@@ -84,11 +108,21 @@ void GlSurface::release() {
     }
 }
 
-void GlSurface::initGL() {
+bool GlSurface::initGL() {
     glewExperimental = GL_TRUE;
-    glewInit();
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+        fprintf(stderr, "GLEW init failed: %s\n", glewGetErrorString(err));
+        return false;
+    }
     
     shader_ = createProgram();
+    if (!shader_) {
+        fprintf(stderr, "Failed to create shader program\n");
+        return false;
+    }
+    
+    resolutionLoc_ = glGetUniformLocation(shader_, "uResolution");
     
     glGenVertexArrays(1, &vao_);
     glGenBuffers(1, &vbo_);
@@ -106,6 +140,8 @@ void GlSurface::initGL() {
     
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    return true;
 }
 
 GLuint GlSurface::compileShader(GLenum type, const char* src) {
@@ -119,6 +155,8 @@ GLuint GlSurface::compileShader(GLenum type, const char* src) {
         char log[512];
         glGetShaderInfoLog(shader, 512, nullptr, log);
         fprintf(stderr, "Shader compile error: %s\n", log);
+        glDeleteShader(shader);
+        return 0;
     }
     
     return shader;
@@ -126,7 +164,13 @@ GLuint GlSurface::compileShader(GLenum type, const char* src) {
 
 GLuint GlSurface::createProgram() {
     GLuint vs = compileShader(GL_VERTEX_SHADER, vertexShaderSrc);
+    if (!vs) return 0;
+    
     GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSrc);
+    if (!fs) {
+        glDeleteShader(vs);
+        return 0;
+    }
     
     GLuint prog = glCreateProgram();
     glAttachShader(prog, vs);
@@ -135,21 +179,27 @@ GLuint GlSurface::createProgram() {
     
     GLint success;
     glGetProgramiv(prog, GL_LINK_STATUS, &success);
+    
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    
     if (!success) {
         char log[512];
         glGetProgramInfoLog(prog, 512, nullptr, log);
         fprintf(stderr, "Program link error: %s\n", log);
+        glDeleteProgram(prog);
+        return 0;
     }
-    
-    glDeleteShader(vs);
-    glDeleteShader(fs);
     
     return prog;
 }
 
 void GlSurface::beginFrame() {
+    if (!ctx_) return;
+    
     glXMakeCurrent(dpy_, win_, ctx_);
     glViewport(0, 0, w_, h_);
+    glDisable(GL_SCISSOR_TEST);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
@@ -167,16 +217,11 @@ void GlSurface::flushLines() {
     if (lineVertices_.empty()) return;
     
     glUseProgram(shader_);
-    glUniform2f(glGetUniformLocation(shader_, "uResolution"), f32(w_), f32(h_));
+    glUniform2f(resolutionLoc_, f32(w_), f32(h_));
     
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, lineVertices_.size() * sizeof(Vertex), lineVertices_.data(), GL_STREAM_DRAW);
-    
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)(2 * sizeof(f32)));
-    glEnableVertexAttribArray(1);
     
     glDrawArrays(GL_LINES, 0, i32(lineVertices_.size()));
     
@@ -188,16 +233,11 @@ void GlSurface::flushTriangles() {
     if (triVertices_.empty()) return;
     
     glUseProgram(shader_);
-    glUniform2f(glGetUniformLocation(shader_, "uResolution"), f32(w_), f32(h_));
+    glUniform2f(resolutionLoc_, f32(w_), f32(h_));
     
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, triVertices_.size() * sizeof(Vertex), triVertices_.data(), GL_STREAM_DRAW);
-    
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)(2 * sizeof(f32)));
-    glEnableVertexAttribArray(1);
     
     glDrawArrays(GL_TRIANGLES, 0, i32(triVertices_.size()));
     

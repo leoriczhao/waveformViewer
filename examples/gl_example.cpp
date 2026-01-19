@@ -53,7 +53,8 @@ int main(int argc, char* argv[]) {
     XSetWMProtocols(dpy, win, &wmDelete, 1);
     
     GlSurface surface;
-    if (!surface.createContext(dpy, win)) {
+    if (!surface.createContext(dpy, win, vi)) {
+        XFree(vi);
         XDestroyWindow(dpy, win);
         XCloseDisplay(dpy);
         return 1;

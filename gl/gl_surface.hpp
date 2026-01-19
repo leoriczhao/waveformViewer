@@ -27,7 +27,7 @@ public:
     void clearClip() override;
     
     void setWindow(Window win) { win_ = win; }
-    bool createContext(Display* dpy, Window win);
+    bool createContext(Display* dpy, Window win, XVisualInfo* vi = nullptr);
     
 private:
     Display* dpy_ = nullptr;
@@ -46,8 +46,9 @@ private:
     GLuint vao_ = 0;
     GLuint vbo_ = 0;
     GLuint shader_ = 0;
+    GLint resolutionLoc_ = -1;
     
-    void initGL();
+    bool initGL();
     void flushLines();
     void flushTriangles();
     GLuint compileShader(GLenum type, const char* src);
