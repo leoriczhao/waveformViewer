@@ -22,6 +22,15 @@ void XcbSurface::createPixmap() {
     u32 mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
     u32 values[] = {screen->black_pixel, 0};
     xcb_create_gc(conn_, gc_, pixmap_, mask, values);
+    
+    loadFont();
+}
+
+void XcbSurface::loadFont() {
+    if (font_) return;
+    font_ = xcb_generate_id(conn_);
+    xcb_open_font(conn_, font_, 5, "fixed");
+    xcb_change_gc(conn_, gc_, XCB_GC_FONT, &font_);
 }
 
 void XcbSurface::setWindow(xcb_window_t win) {
@@ -42,8 +51,10 @@ void XcbSurface::resize(i32 w, i32 h) {
 
 void XcbSurface::release() {
     if (conn_) {
+        if (font_) xcb_close_font(conn_, font_);
         if (pixmap_) xcb_free_pixmap(conn_, pixmap_);
         if (gc_) xcb_free_gc(conn_, gc_);
+        font_ = 0;
         pixmap_ = 0;
         gc_ = 0;
     }
@@ -84,7 +95,11 @@ void XcbSurface::drawPolyline(const Point* pts, i32 count, Color c, f32) {
     xcb_poly_line(conn_, XCB_COORD_MODE_ORIGIN, pixmap_, gc_, count, xcb_pts.get());
 }
 
-void XcbSurface::drawText(Point, std::string_view, Color) {}
+void XcbSurface::drawText(Point p, std::string_view text, Color c) {
+    setColor(c);
+    xcb_image_text_8(conn_, text.size(), pixmap_, gc_, 
+                     int16_t(p.x), int16_t(p.y), text.data());
+}
 
 void XcbSurface::setClip(Rect r) {
     xcb_rectangle_t rect = {int16_t(r.x), int16_t(r.y), uint16_t(r.w), uint16_t(r.h)};

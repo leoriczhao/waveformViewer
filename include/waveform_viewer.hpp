@@ -37,6 +37,7 @@ private:
     void drawSignal(Surface* s, const Signal& sig, i32 y);
     void drawTimeScale(Surface* s);
     void drawSignalNames(Surface* s);
+    void clampTimeOffset();
 };
 
 }

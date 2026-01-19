@@ -31,10 +31,12 @@ private:
     xcb_window_t win_ = 0;
     xcb_pixmap_t pixmap_ = 0;
     xcb_gcontext_t gc_ = 0;
+    xcb_font_t font_ = 0;
     i32 w_ = 0, h_ = 0;
     
     void setColor(Color c);
     void createPixmap();
+    void loadFont();
 };
 
 }
