@@ -1,6 +1,7 @@
 #include "waveform_viewer.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace wv {
 
@@ -12,7 +13,7 @@ void WaveformViewer::setData(const WaveformData* data) {
 }
 
 void WaveformViewer::paint(Surface* s) {
-    s->fillRect({0, 0, f32(w_), f32(h_)}, {30, 30, 35, 255});
+    s->fillRect({0, 0, f32(w_), f32(h_)}, {32, 32, 32, 255});
     
     if (!data_) return;
     
@@ -31,38 +32,42 @@ void WaveformViewer::paint(Surface* s) {
 }
 
 void WaveformViewer::drawTimeScale(Surface* s) {
-    Color tickColor = {80, 80, 90, 255};
+    Color tickColor = {90, 90, 90, 255};
+    Color textColor = {180, 180, 180, 255};
     f32 y = 20;
     
     f64 visibleStart = timeOffset_;
     f64 visibleEnd = timeOffset_ + (w_ - nameWidth_) / timeScale_;
     
     f64 step = 1;
-    while (step * timeScale_ < 50) step *= 10;
+    while (step * timeScale_ < 80) step *= 10;
     
     f64 t = std::floor(visibleStart / step) * step;
     while (t <= visibleEnd) {
         f32 x = f32(nameWidth_ + (t - timeOffset_) * timeScale_);
         if (x >= nameWidth_) {
             s->drawLine({x, y}, {x, f32(h_)}, tickColor, 1);
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.0f", t);
+            s->drawText({x + 2, y - 5}, buf, textColor);
         }
         t += step;
     }
 }
 
 void WaveformViewer::drawSignalNames(Surface* s) {
-    s->fillRect({0, 0, f32(nameWidth_), f32(h_)}, {40, 40, 45, 255});
-    s->drawLine({f32(nameWidth_), 0}, {f32(nameWidth_), f32(h_)}, {60, 60, 70, 255}, 1);
+    s->fillRect({0, 0, f32(nameWidth_), f32(h_)}, {45, 45, 45, 255});
+    s->drawLine({f32(nameWidth_), 0}, {f32(nameWidth_), f32(h_)}, {70, 70, 70, 255}, 1);
     
     i32 y = 30;
     for (const auto& sig : data_->signals) {
-        s->drawText({5, f32(y + signalHeight_ / 2)}, sig.name, {200, 200, 200, 255});
+        s->drawText({5, f32(y) + f32(signalHeight_) * 0.5f}, sig.name, {220, 220, 220, 255});
         y += signalHeight_ + 5;
     }
 }
 
 void WaveformViewer::drawSignal(Surface* s, const Signal& sig, i32 y) {
-    Color lineColor = {0, 200, 100, 255};
+    Color lineColor = {50, 200, 50, 255};
     f32 high = f32(y);
     f32 low = f32(y + signalHeight_ - 5);
     f32 xOff = f32(nameWidth_);
@@ -102,6 +107,7 @@ void WaveformViewer::mouseMove(i32 x, i32) {
     if (!dragging_) return;
     f64 dx = x - dragStartX_;
     timeOffset_ = dragStartOffset_ - dx / timeScale_;
+    clampTimeOffset();
     needsRepaint_ = true;
 }
 
@@ -119,8 +125,17 @@ void WaveformViewer::mouseWheel(i32 x, i32 delta) {
     if (newScale > 1e-10 && newScale < 1e10) {
         timeScale_ = newScale;
         timeOffset_ = mouseTime - (x - nameWidth_) / timeScale_;
+        clampTimeOffset();
         needsRepaint_ = true;
     }
+}
+
+void WaveformViewer::clampTimeOffset() {
+    if (!data_) return;
+    f64 visibleWidth = (w_ - nameWidth_) / timeScale_;
+    f64 minOffset = -visibleWidth * 0.1;
+    f64 maxOffset = data_->endTime - visibleWidth * 0.9;
+    timeOffset_ = std::clamp(timeOffset_, minOffset, std::max(minOffset, maxOffset));
 }
 
 }

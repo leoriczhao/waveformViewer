@@ -1,10 +1,9 @@
 #pragma once
 
 #include "surface.hpp"
-#include <vector>
-#include <GL/glew.h>
-#include <GL/glx.h>
 #include <X11/Xlib.h>
+#include <GL/glx.h>
+#include <vector>
 
 namespace wv {
 
@@ -26,11 +25,11 @@ public:
     void setClip(Rect r) override;
     void clearClip() override;
     
-    void setWindow(Window win) { win_ = win; }
-    bool createContext(Display* dpy, Window win, XVisualInfo* vi = nullptr);
+    bool setWindow(Window win, XVisualInfo* vi = nullptr);
+    static XVisualInfo* chooseVisual(Display* dpy);
     
 private:
-    Display* dpy_ = nullptr;
+    Display* display_ = nullptr;
     Window win_ = 0;
     GLXContext ctx_ = nullptr;
     i32 w_ = 0, h_ = 0;
@@ -43,16 +42,23 @@ private:
     std::vector<Vertex> lineVertices_;
     std::vector<Vertex> triVertices_;
     
-    GLuint vao_ = 0;
-    GLuint vbo_ = 0;
-    GLuint shader_ = 0;
-    GLint resolutionLoc_ = -1;
+    u32 vao_ = 0;
+    u32 vbo_ = 0;
+    u32 shader_ = 0;
+    i32 resolutionLoc_ = -1;
+    
+    u32 fontTex_ = 0;
+    u32 textVao_ = 0;
+    u32 textVbo_ = 0;
+    u32 textShader_ = 0;
+    i32 textResLoc_ = -1;
     
     bool initGL();
     void flushLines();
     void flushTriangles();
-    GLuint compileShader(GLenum type, const char* src);
-    GLuint createProgram();
+    u32 compileShader(u32 type, const char* src);
+    u32 createProgram(const char* vs, const char* fs);
+    void initFont();
 };
 
 }
