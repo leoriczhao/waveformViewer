@@ -5,27 +5,38 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(waveform_core STATIC
+set(WAVEFORM_SOURCES
+    src/canvas.cpp
+    src/gpu_device.cpp
+    src/recording.cpp
+    src/surface.cpp
+    src/surface_recording.cpp
     src/waveform_viewer.cpp
     src/vcd_parser.cpp
+    src/glyph_cache.cpp
+    xcb/xcb_raster_device.cpp
+    xcb/surface_raster_xcb.cpp
 )
-target_include_directories(waveform_core PUBLIC include)
-
-add_library(waveform_backend_xcb STATIC
-    xcb/xcb_surface.cpp
-)
-target_include_directories(waveform_backend_xcb PUBLIC include xcb)
-target_link_libraries(waveform_backend_xcb PUBLIC waveform_core xcb)
 
 find_package(OpenGL)
 find_package(X11)
 if(OpenGL_FOUND AND X11_FOUND)
-    add_library(waveform_backend_glx STATIC
-        glx/gl_surface.cpp
+    list(APPEND WAVEFORM_SOURCES
+        glx/gl_context.cpp
+        glx/surface_gpu_gl.cpp
         glx/glad/glad.c
     )
-    target_include_directories(waveform_backend_glx PUBLIC include glx glx/glad)
-    target_link_libraries(waveform_backend_glx PUBLIC waveform_core OpenGL::GL X11)
+endif()
+
+add_library(waveform_viewer STATIC ${WAVEFORM_SOURCES})
+target_include_directories(waveform_viewer PUBLIC include third_party xcb)
+target_link_libraries(waveform_viewer PUBLIC xcb)
+if(OpenGL_FOUND AND X11_FOUND)
+    target_include_directories(waveform_viewer PUBLIC glx glx/glad)
+    target_link_libraries(waveform_viewer PUBLIC OpenGL::GL X11)
+    target_compile_definitions(waveform_viewer PUBLIC WAVEFORM_HAS_GL=1)
+else()
+    target_compile_definitions(waveform_viewer PUBLIC WAVEFORM_HAS_GL=0)
 endif()
 
 option(BUILD_EXAMPLES "Build example applications" ON)
@@ -33,14 +44,7 @@ if(BUILD_EXAMPLES)
     add_executable(waveform_example
         examples/waveform_example.cpp
     )
-    target_link_libraries(waveform_example PRIVATE waveform_backend_xcb)
-    
-    if(TARGET waveform_backend_glx)
-        add_executable(gl_waveform_example
-            examples/gl_waveform_example.cpp
-        )
-        target_link_libraries(gl_waveform_example PRIVATE waveform_backend_glx)
-    endif()
+    target_link_libraries(waveform_example PRIVATE waveform_viewer)
 endif()
 
 option(BUILD_TESTS "Build tests" ON)
@@ -49,5 +53,5 @@ if(BUILD_TESTS)
     add_executable(waveform_tests
         tests/test_main.cpp
     )
-    target_link_libraries(waveform_tests PRIVATE waveform_core GTest::gtest GTest::gmock GTest::gtest_main)
+    target_link_libraries(waveform_tests PRIVATE waveform_viewer GTest::gtest GTest::gmock GTest::gtest_main)
 endif()
