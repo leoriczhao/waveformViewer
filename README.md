@@ -24,6 +24,15 @@ cmake ..
 make
 ```
 
+Common build options:
+
+```bash
+cmake -DWV_OFFICIAL_BUILD=ON -DWV_WERROR=ON ..
+cmake -DWV_ENABLE_GL=OFF ..
+cmake -DWV_ENABLE_EXAMPLES=OFF -DWV_ENABLE_TESTS=OFF ..
+cmake -DWV_SHARED_LIB=ON ..
+```
+
 Run the example:
 ```bash
 ./waveform_example path/to/file.vcd
