@@ -12,6 +12,13 @@ void WaveformViewer::setData(const WaveformData* data) {
     if (data_ && data_->endTime > 0) {
         timeScale_ = f64(w_ - nameWidth_) / data_->endTime;
     }
+    signalRadix_.clear();
+    if (data_) {
+        signalRadix_.reserve(data_->signals.size());
+        for (const auto& sig : data_->signals) {
+            signalRadix_.push_back(sig.radix);
+        }
+    }
     staticLayer_.dirty = true;
     waveformLayer_.dirty = true;
     overlayLayer_.dirty = true;
@@ -75,16 +82,19 @@ void WaveformViewer::drawSignalNames(Canvas* c) {
 
 void WaveformViewer::drawSignalValues(Canvas* c) {
     i32 y = 30;
+    i32 idx = 0;
     for (const auto& sig : data_->signals) {
         u64 val = getValueAtTime(sig, cursorTime_);
-        std::string valStr = formatValue(val, sig.width, sig.radix);
+        Radix radix = signalRadixForIndex(idx, sig);
+        std::string valStr = formatValue(val, sig.width, radix);
         c->drawText({f32(nameWidth_ - 8 - valStr.length() * 7), f32(y) + f32(signalHeight_) * 0.5f},
                     valStr, {150, 220, 150, 255});
         y += signalHeight_ + 5;
+        idx++;
     }
 }
 
-void WaveformViewer::drawSignal(Canvas* c, const Signal& sig, i32 y) {
+void WaveformViewer::drawSignal(Canvas* c, const Signal& sig, i32 y, i32 signalIndex) {
     Color lineColor = {50, 200, 50, 255};
     f32 high = f32(y);
     f32 low = f32(y + signalHeight_ - 5);
@@ -95,6 +105,7 @@ void WaveformViewer::drawSignal(Canvas* c, const Signal& sig, i32 y) {
     if (sig.width > 1) {
         Color busColor = {80, 180, 220, 255};
         f32 mid = (high + low) / 2;
+        Radix radix = signalRadixForIndex(signalIndex, sig);
         
         for (size_t i = 0; i < sig.changes.size(); ++i) {
             f32 x1 = xOff + f32((sig.changes[i].time - timeOffset_) * timeScale_);
@@ -115,7 +126,7 @@ void WaveformViewer::drawSignal(Canvas* c, const Signal& sig, i32 y) {
                 c->drawPolyline(pts, 7, busColor, 1);
                 
                 if (x2 - x1 > 40) {
-                    std::string val = formatValue(sig.changes[i].value, sig.width, sig.radix);
+                    std::string val = formatValue(sig.changes[i].value, sig.width, radix);
                     c->drawText({x1 + slant + 3, mid - 5}, val, {200, 230, 255, 255});
                 }
             }
@@ -195,9 +206,11 @@ void WaveformViewer::updateWaveformLayer() {
     c->save();
     c->clipRect({f32(nameWidth_), 0, f32(w_ - nameWidth_), f32(h_)});
     i32 y = 30;
+    i32 idx = 0;
     for (const auto& sig : data_->signals) {
-        drawSignal(c, sig, y);
+        drawSignal(c, sig, y, idx);
         y += signalHeight_ + 5;
+        idx++;
     }
     c->restore();
     waveformLayer_.surface->endFrame();
@@ -219,6 +232,7 @@ void WaveformViewer::updateOverlayLayer() {
 void WaveformViewer::mouseDown(i32 x, i32 y) {
     if (x < nameWidth_) {
         // Click in name area: select signal
+        if (y < 30) return;
         i32 idx = (y - 30) / (signalHeight_ + 5);
         if (data_ && idx >= 0 && idx < static_cast<i32>(data_->signals.size())) {
             selectedSignal_ = idx;
@@ -288,7 +302,7 @@ void WaveformViewer::selectSignal(i32 index) {
 }
 
 bool WaveformViewer::jumpToNextEdge() {
-    if (selectedSignal_ < 0 || !data_) return false;
+    if (selectedSignal_ < 0 || !data_ || selectedSignal_ >= static_cast<i32>(data_->signals.size())) return false;
     const auto& sig = data_->signals[selectedSignal_];
     i32 idx = findNextEdgeIndex(sig, cursorTime_);
     if (idx >= 0 && idx < static_cast<i32>(sig.changes.size())) {
@@ -301,7 +315,7 @@ bool WaveformViewer::jumpToNextEdge() {
 }
 
 bool WaveformViewer::jumpToPrevEdge() {
-    if (selectedSignal_ < 0 || !data_) return false;
+    if (selectedSignal_ < 0 || !data_ || selectedSignal_ >= static_cast<i32>(data_->signals.size())) return false;
     const auto& sig = data_->signals[selectedSignal_];
     i32 idx = findPrevEdgeIndex(sig, cursorTime_);
     if (idx >= 0 && idx < static_cast<i32>(sig.changes.size())) {
@@ -314,11 +328,11 @@ bool WaveformViewer::jumpToPrevEdge() {
 }
 
 void WaveformViewer::setSignalRadix(i32 signalIndex, Radix radix) {
-    // Note: This modifies data through const pointer - in real implementation,
-    // radix should be stored separately or data should be non-const
-    (void)signalIndex;
-    (void)radix;
+    if (!data_) return;
+    if (signalIndex < 0 || signalIndex >= static_cast<i32>(signalRadix_.size())) return;
+    signalRadix_[signalIndex] = radix;
     needsRepaint_ = true;
+    waveformLayer_.dirty = true;
     overlayLayer_.dirty = true;
 }
 
@@ -391,9 +405,10 @@ u64 WaveformViewer::getValueAtTime(const Signal& sig, f64 time) {
 
 std::string WaveformViewer::formatValue(u64 value, i32 width, Radix radix) {
     char buf[72];
+    i32 effectiveWidth = std::clamp(width, 1, 64);
     switch (radix) {
         case Radix::Hex: {
-            i32 hexDigits = (width + 3) / 4;
+            i32 hexDigits = (effectiveWidth + 3) / 4;
             std::snprintf(buf, sizeof(buf), "0x%0*llX", hexDigits, 
                          static_cast<unsigned long long>(value));
             break;
@@ -406,14 +421,21 @@ std::string WaveformViewer::formatValue(u64 value, i32 width, Radix radix) {
         default: {
             buf[0] = '0';
             buf[1] = 'b';
-            for (i32 i = 0; i < width && i < 64; ++i) {
-                buf[2 + i] = (value >> (width - 1 - i)) & 1 ? '1' : '0';
+            for (i32 i = 0; i < effectiveWidth; ++i) {
+                buf[2 + i] = (value >> (effectiveWidth - 1 - i)) & 1 ? '1' : '0';
             }
-            buf[2 + std::min(width, 64)] = '\0';
+            buf[2 + effectiveWidth] = '\0';
             break;
         }
     }
     return buf;
+}
+
+Radix WaveformViewer::signalRadixForIndex(i32 index, const Signal& sig) const {
+    if (index >= 0 && index < static_cast<i32>(signalRadix_.size())) {
+        return signalRadix_[index];
+    }
+    return sig.radix;
 }
 
 }

@@ -4,6 +4,7 @@
 #include "surface.hpp"
 #include "recording.hpp"
 #include <memory>
+#include <vector>
 
 namespace wv {
 
@@ -66,7 +67,7 @@ private:
     f64 cursorTime_ = 0;
     i32 selectedSignal_ = -1;
     
-    void drawSignal(Canvas* c, const Signal& sig, i32 y);
+    void drawSignal(Canvas* c, const Signal& sig, i32 y, i32 signalIndex);
     void drawTimeScale(Canvas* c);
     void drawSignalNames(Canvas* c);
     void drawSignalValues(Canvas* c);
@@ -94,6 +95,9 @@ private:
     i32 findPrevEdgeIndex(const Signal& sig, f64 time);
     
     u64 getValueAtTime(const Signal& sig, f64 time);
+    Radix signalRadixForIndex(i32 index, const Signal& sig) const;
+
+    std::vector<Radix> signalRadix_;
 };
 
 }

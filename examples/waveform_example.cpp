@@ -123,6 +123,7 @@ static int runXcb(const char* path, GlyphCache& glyphCache) {
         }
     }
 
+    surface.reset();
     xcb_destroy_window(conn, win);
     xcb_disconnect(conn);
     return 0;
@@ -221,6 +222,7 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
         }
     }
 
+    surface.reset();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
