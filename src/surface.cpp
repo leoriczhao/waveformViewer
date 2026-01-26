@@ -35,27 +35,29 @@ void Surface::submit(const Recording& recording) {
         context_->submit(recording);
         return;
     }
+    const auto& arena = recording.arena();
     for (const auto& op : recording.ops()) {
         switch (op.type) {
             case DrawOp::Type::FillRect:
-                device_->fillRect(op.rect, op.color);
+                device_->fillRect(op.data.fill.rect, op.color);
                 break;
             case DrawOp::Type::StrokeRect:
-                device_->strokeRect(op.rect, op.color, op.width);
+                device_->strokeRect(op.data.stroke.rect, op.color, op.width);
                 break;
             case DrawOp::Type::Line:
-                device_->drawLine(op.p1, op.p2, op.color, op.width);
+                device_->drawLine(op.data.line.p1, op.data.line.p2, op.color, op.width);
                 break;
             case DrawOp::Type::Polyline:
-                if (!op.points.empty()) {
-                    device_->drawPolyline(op.points.data(), static_cast<i32>(op.points.size()), op.color, op.width);
+                if (op.data.polyline.count > 0) {
+                    device_->drawPolyline(arena.getPoints(op.data.polyline.offset), 
+                                        op.data.polyline.count, op.color, op.width);
                 }
                 break;
             case DrawOp::Type::Text:
-                device_->drawText(op.p1, op.text, op.color);
+                device_->drawText(op.data.text.pos, arena.getString(op.data.text.offset), op.color);
                 break;
             case DrawOp::Type::SetClip:
-                device_->setClipRect(op.rect);
+                device_->setClipRect(op.data.clip.rect);
                 break;
             case DrawOp::Type::ClearClip:
                 device_->resetClip();

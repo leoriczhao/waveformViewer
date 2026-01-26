@@ -20,6 +20,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(WAVEFORM_SOURCES
     src/canvas.cpp
+    src/draw_pass.cpp
     src/gpu_device.cpp
     src/recording.cpp
     src/surface.cpp

@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 #include <memory>
+#include <cstring>
 
 namespace wv {
 
@@ -29,14 +30,59 @@ struct DrawOp {
     f32 width = 1.0f;
 };
 
+// Arena allocator for DrawOp string and point data
+class DrawOpArena {
+public:
+    explicit DrawOpArena(size_t initialCapacity = 4096);
+    
+    // Allocate raw bytes, returns offset
+    u32 allocate(size_t bytes);
+    
+    // Store string, returns offset
+    u32 storeString(std::string_view str);
+    
+    // Store points array, returns offset
+    u32 storePoints(const Point* pts, i32 count);
+    
+    // Access stored data
+    const char* getString(u32 offset) const;
+    const Point* getPoints(u32 offset) const;
+    
+    void reset();
+    
+private:
+    std::vector<u8> data_;
+};
+
+// Compact DrawOp structure - 28 bytes
+struct CompactDrawOp {
+    DrawOp::Type type;      // 4 bytes (enum)
+    Color color;            // 4 bytes
+    f32 width;              // 4 bytes
+    
+    union Data {
+        struct { Rect rect; } fill;                           // 16 bytes
+        struct { Rect rect; } stroke;                         // 16 bytes
+        struct { Point p1; Point p2; } line;                  // 16 bytes
+        struct { u32 offset; u16 count; u16 pad; } polyline;  // 8 bytes
+        struct { Point pos; u32 offset; u16 len; u16 pad; } text; // 16 bytes
+        struct { Rect rect; } clip;                           // 16 bytes
+        
+        Data() : fill{{}} {}
+    } data;                 // 16 bytes
+};
+// Total: 28 bytes
+
 class Recording {
 public:
-    explicit Recording(std::vector<DrawOp> ops);
+    Recording(std::vector<CompactDrawOp> ops, DrawOpArena arena);
 
-    const std::vector<DrawOp>& ops() const { return ops_; }
+    const std::vector<CompactDrawOp>& ops() const { return ops_; }
+    const DrawOpArena& arena() const { return arena_; }
 
 private:
-    std::vector<DrawOp> ops_;
+    std::vector<CompactDrawOp> ops_;
+    DrawOpArena arena_;
 };
 
 class Recorder {
@@ -54,7 +100,8 @@ public:
     std::unique_ptr<Recording> finish();
 
 private:
-    std::vector<DrawOp> ops_;
+    std::vector<CompactDrawOp> ops_;
+    DrawOpArena arena_;
 };
 
 }
