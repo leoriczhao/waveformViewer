@@ -103,14 +103,14 @@ TEST_F(WaveformViewerTest, InitialState) {
 }
 
 TEST_F(WaveformViewerTest, MouseDragTriggersRepaint) {
-    viewer.mouseDown(100, 100);
-    viewer.mouseMove(150, 100);
+    viewer.mouseDown(150, 100);  // x must be > nameWidth (120)
+    viewer.mouseMove(200, 100);
     EXPECT_TRUE(viewer.needsRepaint());
 }
 
 TEST_F(WaveformViewerTest, ClearRepaintFlag) {
-    viewer.mouseDown(100, 100);
-    viewer.mouseMove(150, 100);
+    viewer.mouseDown(150, 100);
+    viewer.mouseMove(200, 100);
     viewer.clearRepaintFlag();
     EXPECT_FALSE(viewer.needsRepaint());
 }
@@ -121,9 +121,9 @@ TEST_F(WaveformViewerTest, MouseMoveWithoutDownNoRepaint) {
 }
 
 TEST_F(WaveformViewerTest, MouseUpStopsDrag) {
-    viewer.mouseDown(100, 100);
+    viewer.mouseDown(150, 100);
     viewer.mouseUp();
-    viewer.mouseMove(200, 100);
+    viewer.mouseMove(250, 100);
     EXPECT_FALSE(viewer.needsRepaint());
 }
 

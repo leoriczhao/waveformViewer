@@ -6,6 +6,8 @@
 
 namespace wv {
 
+enum class Radix { Binary, Hex, Decimal };
+
 struct SignalChange {
     u64 time;
     u64 value;
@@ -16,6 +18,7 @@ struct Signal {
     std::string id;
     i32 width;
     std::vector<SignalChange> changes;
+    Radix radix = Radix::Hex;
 };
 
 struct WaveformData {

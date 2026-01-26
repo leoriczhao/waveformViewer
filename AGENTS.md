@@ -9,7 +9,10 @@ cmake ..
 make
 
 # Build with specific options
-cmake -DBUILD_EXAMPLES=ON -DBUILD_TESTS=ON ..
+cmake -DWV_ENABLE_EXAMPLES=ON -DWV_ENABLE_TESTS=ON ..
+cmake -DWV_OFFICIAL_BUILD=ON -DWV_WERROR=ON ..
+cmake -DWV_ENABLE_GL=OFF ..
+cmake -DWV_SHARED_LIB=ON ..
 
 # Clean build
 rm -rf build && mkdir build && cd build && cmake .. && make
