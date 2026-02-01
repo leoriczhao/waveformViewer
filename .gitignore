@@ -1,5 +1,7 @@
 build/
+build-macos/
 .cache/
 compile_commands.json
 *.o
 *.a
+*.png
