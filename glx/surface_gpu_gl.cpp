@@ -9,7 +9,7 @@ std::unique_ptr<Surface> Surface::MakeGpu(std::unique_ptr<Context> context, i32 
     if (!context->init(w, h)) return nullptr;
     
     auto device = std::make_unique<GpuDevice>();
-    auto surface = std::unique_ptr<Surface>(new Surface(std::move(device), std::move(context)));
+    auto surface = std::unique_ptr<Surface>(new Surface(std::move(device), std::move(context), nullptr));
     surface->resize(w, h);
     return surface;
 }

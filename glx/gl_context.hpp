@@ -3,8 +3,6 @@
 #include "context.hpp"
 #include "glyph_cache.hpp"
 #include "recording.hpp"
-#include <X11/Xlib.h>
-#include <GL/glx.h>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -45,27 +43,21 @@ private:
     std::array<u32, 8> boundTextures_ = {};
 };
 
+// OpenGL context implementation.
+// Assumes the host has already created an OpenGL context and made it current.
 class GlContext : public Context {
 public:
-    static std::unique_ptr<GlContext> Create(Display* dpy, Window win);
-
+    GlContext();
     ~GlContext() override;
 
     bool init(i32 w, i32 h) override;
     void beginFrame() override;
     void resize(i32 w, i32 h) override;
     void submit(const Recording& recording) override;
-    void present() override;
+    void flush() override;
     void setGlyphCache(GlyphCache* cache) override;
 
-    static XVisualInfo* chooseVisual(Display* dpy);
-
 private:
-    GlContext(Display* dpy, Window win);
-
-    Display* display_ = nullptr;
-    Window win_ = 0;
-    GLXContext ctx_ = nullptr;
     i32 w_ = 0, h_ = 0;
 
     struct Vertex {

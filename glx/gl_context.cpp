@@ -145,13 +145,10 @@ void main() {
 }
 )";
 
-GlContext::GlContext(Display* dpy, Window win) : display_(dpy), win_(win) {
+GlContext::GlContext() {
 }
 
 GlContext::~GlContext() {
-    if (ctx_) {
-        glXMakeCurrent(display_, win_, ctx_);
-    }
     if (textShader_) {
         glDeleteProgram(textShader_);
         textShader_ = 0;
@@ -180,33 +177,17 @@ GlContext::~GlContext() {
         glDeleteVertexArrays(1, &vao_);
         vao_ = 0;
     }
-    if (ctx_) {
-        glXMakeCurrent(display_, None, nullptr);
-        glXDestroyContext(display_, ctx_);
-        ctx_ = nullptr;
-    }
 }
 
-std::unique_ptr<GlContext> GlContext::Create(Display* dpy, Window win) {
-    return std::unique_ptr<GlContext>(new GlContext(dpy, win));
-}
-
-XVisualInfo* GlContext::chooseVisual(Display* dpy) {
-    int attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 0, None};
-    return glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
+std::unique_ptr<Context> Context::MakeGL() {
+    auto ctx = std::unique_ptr<GlContext>(new GlContext());
+    return ctx;
 }
 
 bool GlContext::init(i32 w, i32 h) {
     w_ = w;
     h_ = h;
     
-    XVisualInfo* vi = chooseVisual(display_);
-    if (!vi) return false;
-    
-    ctx_ = glXCreateContext(display_, vi, nullptr, True);
-    XFree(vi);
-    if (!ctx_) return false;
-    if (!glXMakeCurrent(display_, win_, ctx_)) return false;
     if (!gladLoadGL()) return false;
     
     return initGL();
@@ -219,8 +200,6 @@ void GlContext::resize(i32 w, i32 h) {
 }
 
 void GlContext::beginFrame() {
-    if (!ctx_) return;
-    glXMakeCurrent(display_, win_, ctx_);
     stateCache_.invalidate();
     glViewport(0, 0, w_, h_);
     glDisable(GL_SCISSOR_TEST);
@@ -499,7 +478,6 @@ void GlContext::clearClip() {
 }
 
 void GlContext::submit(const Recording& recording) {
-    if (!ctx_) return;
     lineVertices_.clear();
     triVertices_.clear();
     textVertices_.clear();
@@ -514,10 +492,8 @@ void GlContext::submit(const Recording& recording) {
     flushText();
 }
 
-void GlContext::present() {
-    if (ctx_) {
-        glXSwapBuffers(display_, win_);
-    }
+void GlContext::flush() {
+    glFlush();
 }
 
 void GlContext::setGlyphCache(GlyphCache* cache) {

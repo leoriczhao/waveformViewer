@@ -8,7 +8,7 @@
 #include <cstring>
 
 #if WAVEFORM_HAS_GL
-#include "gl_context.hpp"
+#include "context.hpp"
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <GL/glx.h>
@@ -27,6 +27,16 @@ static bool parseArgs(int argc, char* argv[], bool& useGpu, const char*& path) {
         }
     }
     return path != nullptr;
+}
+
+// Helper: blit Pixmap to XCB window
+static void blitToXcb(xcb_connection_t* conn, xcb_window_t win, xcb_gcontext_t gc,
+                       const wv::Pixmap& pixmap) {
+    xcb_put_image(conn, XCB_IMAGE_FORMAT_Z_PIXMAP, win, gc,
+                  pixmap.width(), pixmap.height(), 0, 0, 0, 24,
+                  pixmap.info().computeByteSize(),
+                  pixmap.addr8());
+    xcb_flush(conn);
 }
 
 static int runXcb(const char* path, GlyphCache& glyphCache) {
@@ -48,7 +58,14 @@ static int runXcb(const char* path, GlyphCache& glyphCache) {
     xcb_map_window(conn, win);
     xcb_flush(conn);
 
-    auto surface = Surface::MakeRaster(conn, static_cast<WindowID>(win), 800, 600);
+    // Create GC for blitting
+    xcb_gcontext_t gc = xcb_generate_id(conn);
+    u32 gcMask = XCB_GC_GRAPHICS_EXPOSURES;
+    u32 gcValues[] = {0};
+    xcb_create_gc(conn, gc, win, gcMask, gcValues);
+
+    // Create raster surface (BGRA for XCB)
+    auto surface = Surface::MakeRaster(800, 600, PixelFormat::BGRA8888);
     if (!surface) {
         xcb_destroy_window(conn, win);
         xcb_disconnect(conn);
@@ -60,6 +77,14 @@ static int runXcb(const char* path, GlyphCache& glyphCache) {
     viewer.setSize(800, 600);
     viewer.setData(&parser.data());
 
+    auto renderAndBlit = [&]() {
+        surface->beginFrame();
+        viewer.paint(surface.get());
+        surface->endFrame();
+        surface->flush();
+        blitToXcb(conn, win, gc, *surface->peekPixels());
+    };
+
     bool running = true;
     while (running) {
         xcb_generic_event_t* ev = xcb_wait_for_event(conn);
@@ -67,20 +92,14 @@ static int runXcb(const char* path, GlyphCache& glyphCache) {
 
         switch (ev->response_type & ~0x80) {
             case XCB_EXPOSE:
-                surface->beginFrame();
-                viewer.paint(surface.get());
-                surface->endFrame();
-                surface->present();
+                renderAndBlit();
                 break;
             case XCB_CONFIGURE_NOTIFY: {
                 auto* cfg = reinterpret_cast<xcb_configure_notify_event_t*>(ev);
                 viewer.setSize(cfg->width, cfg->height);
                 surface->resize(cfg->width, cfg->height);
                 viewer.setData(&parser.data());
-                surface->beginFrame();
-                viewer.paint(surface.get());
-                surface->endFrame();
-                surface->present();
+                renderAndBlit();
                 break;
             }
             case XCB_BUTTON_PRESS: {
@@ -115,21 +134,23 @@ static int runXcb(const char* path, GlyphCache& glyphCache) {
         free(ev);
 
         if (viewer.needsRepaint()) {
-            surface->beginFrame();
-            viewer.paint(surface.get());
-            surface->endFrame();
-            surface->present();
+            renderAndBlit();
             viewer.clearRepaintFlag();
         }
     }
 
-    surface.reset();
+    xcb_free_gc(conn, gc);
     xcb_destroy_window(conn, win);
     xcb_disconnect(conn);
     return 0;
 }
 
 #if WAVEFORM_HAS_GL
+static XVisualInfo* chooseGlVisual(Display* dpy) {
+    int attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 0, None};
+    return glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
+}
+
 static int runGl(const char* path, GlyphCache& glyphCache) {
     VcdParser parser;
     if (!parser.parse(path)) return 1;
@@ -138,7 +159,7 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
     if (!dpy) return 1;
 
     int screen = DefaultScreen(dpy);
-    XVisualInfo* vi = GlContext::chooseVisual(dpy);
+    XVisualInfo* vi = chooseGlVisual(dpy);
     if (!vi) { XCloseDisplay(dpy); return 1; }
 
     Colormap cmap = XCreateColormap(dpy, RootWindow(dpy, screen), vi->visual, AllocNone);
@@ -153,9 +174,20 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
     XMapWindow(dpy, win);
     XFree(vi);
 
-    auto ctx = GlContext::Create(dpy, win);
+    // Host creates and activates GL context
+    GLXContext glxCtx = glXCreateContext(dpy, chooseGlVisual(dpy), nullptr, True);
+    if (!glxCtx) {
+        XDestroyWindow(dpy, win);
+        XCloseDisplay(dpy);
+        return 1;
+    }
+    glXMakeCurrent(dpy, win, glxCtx);
+
+    // waveformViewer only needs to know GL is current
+    auto ctx = Context::MakeGL();
     auto surface = Surface::MakeGpu(std::move(ctx), 800, 600);
     if (!surface) {
+        glXDestroyContext(dpy, glxCtx);
         XDestroyWindow(dpy, win);
         XCloseDisplay(dpy);
         return 1;
@@ -166,6 +198,14 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
     viewer.setSize(800, 600);
     viewer.setData(&parser.data());
 
+    auto renderAndPresent = [&]() {
+        surface->beginFrame();
+        viewer.paint(surface.get());
+        surface->endFrame();
+        surface->flush();
+        glXSwapBuffers(dpy, win);  // Host presents
+    };
+
     bool running = true;
     while (running) {
         XEvent ev;
@@ -174,10 +214,7 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
         switch (ev.type) {
             case Expose:
                 if (ev.xexpose.count == 0) {
-                    surface->beginFrame();
-                    viewer.paint(surface.get());
-                    surface->endFrame();
-                    surface->present();
+                    renderAndPresent();
                 }
                 break;
             case ConfigureNotify: {
@@ -186,10 +223,7 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
                 viewer.setSize(w, h);
                 surface->resize(w, h);
                 viewer.setData(&parser.data());
-                surface->beginFrame();
-                viewer.paint(surface.get());
-                surface->endFrame();
-                surface->present();
+                renderAndPresent();
                 break;
             }
             case ButtonPress:
@@ -214,15 +248,14 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
         }
 
         if (viewer.needsRepaint()) {
-            surface->beginFrame();
-            viewer.paint(surface.get());
-            surface->endFrame();
-            surface->present();
+            renderAndPresent();
             viewer.clearRepaintFlag();
         }
     }
 
     surface.reset();
+    glXMakeCurrent(dpy, None, nullptr);
+    glXDestroyContext(dpy, glxCtx);
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
@@ -251,7 +284,7 @@ int main(int argc, char* argv[]) {
     }
 #else
     if (useGpu) {
-        fprintf(stderr, "GPU backend not available, using XCB\n");
+        fprintf(stderr, "GPU backend not available, using software raster\n");
     }
 #endif
 

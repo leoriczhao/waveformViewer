@@ -14,9 +14,6 @@ void GpuDevice::endFrame() {
     recording_ = recorder_.finish();
 }
 
-void GpuDevice::present() {
-}
-
 void GpuDevice::fillRect(Rect r, Color c) {
     recorder_.fillRect(r, c);
 }

@@ -15,7 +15,6 @@ public:
     virtual void resize(i32 w, i32 h) = 0;
     virtual void beginFrame() = 0;
     virtual void endFrame() = 0;
-    virtual void present() = 0;
 
     virtual void fillRect(Rect r, Color c) = 0;
     virtual void strokeRect(Rect r, Color c, f32 width = 1.0f) = 0;
@@ -30,17 +29,11 @@ public:
     virtual std::unique_ptr<Recording> finishRecording() { return nullptr; }
 };
 
-class RasterDevice : public Device {
-public:
-    ~RasterDevice() override = default;
-};
-
 class GpuDevice : public Device {
 public:
     void resize(i32 w, i32 h) override;
     void beginFrame() override;
     void endFrame() override;
-    void present() override;
 
     void fillRect(Rect r, Color c) override;
     void strokeRect(Rect r, Color c, f32 width) override;

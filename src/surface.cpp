@@ -5,14 +5,21 @@
 
 namespace wv {
 
-Surface::Surface(std::unique_ptr<Device> device, std::unique_ptr<Context> context)
-    : device_(std::move(device)), context_(std::move(context)) {
+Surface::Surface(std::unique_ptr<Device> device,
+                 std::unique_ptr<Context> context,
+                 std::unique_ptr<Pixmap> pixmap)
+    : device_(std::move(device)), context_(std::move(context)),
+      pixmap_(std::move(pixmap)) {
     canvas_ = std::make_unique<Canvas>(device_.get());
 }
 
 Surface::~Surface() = default;
 
 void Surface::resize(i32 w, i32 h) {
+    if (pixmap_) {
+        PixmapInfo info = PixmapInfo::Make(w, h, pixmap_->format());
+        pixmap_->reallocate(info);
+    }
     device_->resize(w, h);
     if (context_) {
         context_->resize(w, h);
@@ -66,16 +73,23 @@ void Surface::submit(const Recording& recording) {
     }
 }
 
-void Surface::present() {
+void Surface::flush() {
     if (context_) {
         auto recording = device_->finishRecording();
         if (recording) {
             context_->submit(*recording);
         }
-        context_->present();
-    } else {
-        device_->present();
+        context_->flush();
     }
+    // Raster surfaces: no-op, pixels are already in the Pixmap
+}
+
+Pixmap* Surface::peekPixels() {
+    return pixmap_.get();
+}
+
+const Pixmap* Surface::peekPixels() const {
+    return pixmap_.get();
 }
 
 std::unique_ptr<Recording> Surface::takeRecording() {

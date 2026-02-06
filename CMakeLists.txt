@@ -18,18 +18,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(WAVEFORM_SOURCES
+# Core library sources (platform-independent)
+set(WAVEFORM_CORE_SOURCES
     src/canvas.cpp
     src/draw_pass.cpp
     src/gpu_device.cpp
+    src/pixmap.cpp
+    src/raster_device.cpp
     src/recording.cpp
     src/surface.cpp
+    src/surface_raster.cpp
     src/surface_recording.cpp
     src/waveform_viewer.cpp
     src/vcd_parser.cpp
     src/glyph_cache.cpp
-    xcb/xcb_raster_device.cpp
-    xcb/surface_raster_xcb.cpp
 )
 
 if(WV_SHARED_LIB)
@@ -38,37 +40,50 @@ else()
     set(WV_LIBRARY_TYPE STATIC)
 endif()
 
+add_library(waveform_core ${WV_LIBRARY_TYPE} ${WAVEFORM_CORE_SOURCES})
+target_include_directories(waveform_core PUBLIC include third_party)
+
+if(WV_WERROR)
+    target_compile_options(waveform_core PRIVATE -Werror)
+endif()
+
+# Optional: OpenGL backend
 find_package(OpenGL)
-find_package(X11)
-if(WV_ENABLE_GL AND OpenGL_FOUND AND X11_FOUND)
-    list(APPEND WAVEFORM_SOURCES
+if(WV_ENABLE_GL AND OpenGL_FOUND)
+    set(GL_BACKEND_SOURCES
         glx/gl_context.cpp
         glx/surface_gpu_gl.cpp
         glx/glad/glad.c
     )
+    add_library(waveform_backend_glx ${WV_LIBRARY_TYPE} ${GL_BACKEND_SOURCES})
+    target_include_directories(waveform_backend_glx PUBLIC include glx glx/glad)
+    target_link_libraries(waveform_backend_glx PUBLIC waveform_core OpenGL::GL ${CMAKE_DL_LIBS})
+    target_compile_definitions(waveform_backend_glx PUBLIC WAVEFORM_HAS_GL=1)
+    if(WV_WERROR)
+        target_compile_options(waveform_backend_glx PRIVATE -Werror)
+    endif()
 endif()
 
-add_library(waveform_viewer ${WV_LIBRARY_TYPE} ${WAVEFORM_SOURCES})
-target_include_directories(waveform_viewer PUBLIC include third_party xcb)
-target_link_libraries(waveform_viewer PUBLIC xcb)
-
-if(WV_WERROR)
-    target_compile_options(waveform_viewer PRIVATE -Werror)
-endif()
-
-if(WV_ENABLE_GL AND OpenGL_FOUND AND X11_FOUND)
-    target_include_directories(waveform_viewer PUBLIC glx glx/glad)
-    target_link_libraries(waveform_viewer PUBLIC OpenGL::GL X11)
-    target_compile_definitions(waveform_viewer PUBLIC WAVEFORM_HAS_GL=1)
+# Convenience: combined library
+add_library(waveform_viewer INTERFACE)
+target_link_libraries(waveform_viewer INTERFACE waveform_core)
+if(WV_ENABLE_GL AND OpenGL_FOUND)
+    target_link_libraries(waveform_viewer INTERFACE waveform_backend_glx)
+    target_compile_definitions(waveform_viewer INTERFACE WAVEFORM_HAS_GL=1)
 else()
-    target_compile_definitions(waveform_viewer PUBLIC WAVEFORM_HAS_GL=0)
+    target_compile_definitions(waveform_viewer INTERFACE WAVEFORM_HAS_GL=0)
 endif()
 
+# Example application (uses XCB + optional GLX for windowing)
 if(WV_ENABLE_EXAMPLES)
+    find_package(X11)
     add_executable(waveform_example
         examples/waveform_example.cpp
     )
     target_link_libraries(waveform_example PRIVATE waveform_viewer)
+    if(X11_FOUND)
+        target_link_libraries(waveform_example PRIVATE xcb X11)
+    endif()
 endif()
 
 if(WV_ENABLE_TESTS)
