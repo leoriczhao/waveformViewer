@@ -64,10 +64,10 @@ struct CompactDrawOp {
         struct { Rect rect; } fill;                           // 16 bytes
         struct { Rect rect; } stroke;                         // 16 bytes
         struct { Point p1; Point p2; } line;                  // 16 bytes
-        struct { u32 offset; u16 count; u16 pad; } polyline;  // 8 bytes
-        struct { Point pos; u32 offset; u16 len; u16 pad; } text; // 16 bytes
+        struct { u32 offset; u32 count; } polyline;           // 8 bytes
+        struct { Point pos; u32 offset; u32 len; } text;      // 16 bytes
         struct { Rect rect; } clip;                           // 16 bytes
-        
+
         Data() : fill{{}} {}
     } data;                 // 16 bytes
 };

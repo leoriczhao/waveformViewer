@@ -407,7 +407,7 @@ void GlContext::applyOp(const CompactDrawOp& op, const DrawOpArena& arena) {
             f32 penX = op.data.text.pos.x;
             i32 baseline = i32(op.data.text.pos.y) + glyphCache_->ascent();
             
-            for (u16 i = 0; i < op.data.text.len; ++i) {
+            for (u32 i = 0; i < op.data.text.len; ++i) {
                 char ch = text[i];
                 const GlyphMetrics* g = glyphCache_->getGlyph(ch);
                 if (!g) continue;

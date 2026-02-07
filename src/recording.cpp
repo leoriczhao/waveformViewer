@@ -22,9 +22,16 @@ u32 DrawOpArena::storeString(std::string_view str) {
 }
 
 u32 DrawOpArena::storePoints(const Point* pts, i32 count) {
+    // Align to Point's alignment (4 bytes for f32 members)
+    constexpr size_t align = alignof(Point);
+    size_t cur = data_.size();
+    size_t aligned = (cur + align - 1) & ~(align - 1);
+    if (aligned > cur) {
+        data_.resize(aligned, 0);
+    }
     u32 offset = static_cast<u32>(data_.size());
     size_t bytes = count * sizeof(Point);
-    data_.insert(data_.end(), reinterpret_cast<const u8*>(pts), 
+    data_.insert(data_.end(), reinterpret_cast<const u8*>(pts),
                  reinterpret_cast<const u8*>(pts) + bytes);
     return offset;
 }
@@ -84,8 +91,7 @@ void Recorder::drawPolyline(const Point* pts, i32 count, Color c, f32 width) {
     op.color = c;
     op.width = width;
     op.data.polyline.offset = arena_.storePoints(pts, count);
-    op.data.polyline.count = static_cast<u16>(count);
-    op.data.polyline.pad = 0;
+    op.data.polyline.count = static_cast<u32>(count);
     ops_.push_back(op);
 }
 
@@ -96,8 +102,7 @@ void Recorder::drawText(Point p, std::string_view text, Color c) {
     op.width = 1.0f;
     op.data.text.pos = p;
     op.data.text.offset = arena_.storeString(text);
-    op.data.text.len = static_cast<u16>(text.size());
-    op.data.text.pad = 0;
+    op.data.text.len = static_cast<u32>(text.size());
     ops_.push_back(op);
 }
 

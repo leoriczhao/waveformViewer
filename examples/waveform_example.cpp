@@ -172,10 +172,10 @@ static int runGl(const char* path, GlyphCache& glyphCache) {
         vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
     XStoreName(dpy, win, "Waveform Viewer (OpenGL)");
     XMapWindow(dpy, win);
-    XFree(vi);
 
-    // Host creates and activates GL context
-    GLXContext glxCtx = glXCreateContext(dpy, chooseGlVisual(dpy), nullptr, True);
+    // Host creates and activates GL context (reuse vi before freeing)
+    GLXContext glxCtx = glXCreateContext(dpy, vi, nullptr, True);
+    XFree(vi);
     if (!glxCtx) {
         XDestroyWindow(dpy, win);
         XCloseDisplay(dpy);
