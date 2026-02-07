@@ -24,9 +24,23 @@ cmake ..
 make
 ```
 
+Common build options:
+
+```bash
+cmake -DWV_OFFICIAL_BUILD=ON -DWV_WERROR=ON ..
+cmake -DWV_ENABLE_GL=OFF ..
+cmake -DWV_ENABLE_EXAMPLES=OFF -DWV_ENABLE_TESTS=OFF ..
+cmake -DWV_SHARED_LIB=ON ..
+```
+
 Run the example:
 ```bash
 ./waveform_example path/to/file.vcd
+```
+
+Run with OpenGL (if available):
+```bash
+./waveform_example --gpu path/to/file.vcd
 ```
 
 ## Usage
@@ -34,7 +48,7 @@ Run the example:
 ```cpp
 #include "waveform_viewer.hpp"
 #include "vcd_parser.hpp"
-#include "xcb_surface.hpp"
+#include "surface.hpp"
 
 using namespace wv;
 
@@ -43,15 +57,17 @@ VcdParser parser;
 parser.parse("signals.vcd");
 
 // Create surface and viewer
-XcbSurface surface;
-surface.init(conn, 800, 600);
+auto surface = Surface::MakeRaster(conn, static_cast<WindowID>(win), 800, 600);
 
 WaveformViewer viewer;
 viewer.setSize(800, 600);
 viewer.setData(&parser.data());
 
 // Render
-viewer.paint(&surface);
+surface->beginFrame();
+viewer.paint(surface.get());
+surface->endFrame();
+surface->present();
 
 // Handle input
 viewer.mouseDown(x, y);    // Start drag
@@ -71,14 +87,14 @@ viewer.mouseWheel(x, delta); // Zoom
                   │
 ┌─────────────────▼───────────────────────┐
 │  WaveformViewer                         │
-│  - Renders signals via Surface          │
-│  - Handles pan/zoom interaction         │
+│  - Renders layered recordings           │
+│  - Submits to target Surface            │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  Surface (abstract)                     │
-│  - fillRect, drawLine, drawPolyline...  │
-│  - XcbSurface (current implementation)  │
+│  Canvas + Surface                       │
+│  - Canvas records to Device             │
+│  - Surface owns Device + Context        │
 └─────────────────────────────────────────┘
 ```
 
